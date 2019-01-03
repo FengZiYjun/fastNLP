@@ -2,61 +2,56 @@ import torch
 
 
 class Optimizer(object):
-    """Wrapper of optimizer from framework
-
-            1. Adam: lr (float), weight_decay (float)
-            2. AdaGrad
-            3. RMSProp
-            4. SGD: lr (float), momentum (float)
-
     """
 
-    def __init__(self, optimizer_name, **kwargs):
-        """
-        :param optimizer_name: str, the name of the optimizer
-        :param kwargs: the arguments
+        :param model_params: a generator. E.g. ``model.parameters()`` for PyTorch models.
+        :param kwargs: additional parameters.
+    """
+    def __init__(self, model_params, **kwargs):
+        if model_params is not None and not hasattr(model_params, "__next__"):
+            raise RuntimeError("model parameters should be a generator, rather than {}.".format(type(model_params)))
+        self.model_params = model_params
+        self.settings = kwargs
 
-        """
-        self.optim_name = optimizer_name
-        self.kwargs = kwargs
 
-    @property
-    def name(self):
-        """The name of the optimizer.
+class SGD(Optimizer):
+    """
 
-        :return: str
-        """
-        return self.optim_name
+        :param float lr: learning rate. Default: 0.01
+        :param float momentum: momentum. Default: 0
+        :param model_params: a generator. E.g. ``model.parameters()`` for PyTorch models.
+    """
 
-    @property
-    def params(self):
-        """The arguments used to create the optimizer.
-
-        :return: dict of (str, *)
-        """
-        return self.kwargs
+    def __init__(self, lr=0.001, momentum=0, model_params=None):
+        if not isinstance(lr, float):
+            raise TypeError("learning rate has to be float.")
+        super(SGD, self).__init__(model_params, lr=lr, momentum=momentum)
 
     def construct_from_pytorch(self, model_params):
-        """Construct a optimizer from framework over given model parameters."""
-
-        if self.optim_name in ["SGD", "sgd"]:
-            if "lr" in self.kwargs:
-                if "momentum" not in self.kwargs:
-                    self.kwargs["momentum"] = 0
-                optimizer = torch.optim.SGD(model_params, lr=self.kwargs["lr"], momentum=self.kwargs["momentum"])
-            else:
-                raise ValueError("requires learning rate for SGD optimizer")
-
-        elif self.optim_name in ["adam", "Adam"]:
-            if "lr" in self.kwargs:
-                if "weight_decay" not in self.kwargs:
-                    self.kwargs["weight_decay"] = 0
-                optimizer = torch.optim.Adam(model_params, lr=self.kwargs["lr"],
-                                             weight_decay=self.kwargs["weight_decay"])
-            else:
-                raise ValueError("requires learning rate for Adam optimizer")
-
+        if self.model_params is None:
+            # careful! generator cannot be assigned.
+            return torch.optim.SGD(model_params, **self.settings)
         else:
-            raise NotImplementedError
+            return torch.optim.SGD(self.model_params, **self.settings)
 
-        return optimizer
+
+class Adam(Optimizer):
+    """
+
+        :param float lr: learning rate
+        :param float weight_decay:
+        :param model_params: a generator. E.g. ``model.parameters()`` for PyTorch models.
+    """
+
+    def __init__(self, lr=0.001, weight_decay=0, betas=(0.9, 0.999), eps=1e-8, amsgrad=False, model_params=None):
+        if not isinstance(lr, float):
+            raise TypeError("learning rate has to be float.")
+        super(Adam, self).__init__(model_params, lr=lr, betas=betas, eps=eps, amsgrad=amsgrad,
+                                   weight_decay=weight_decay)
+
+    def construct_from_pytorch(self, model_params):
+        if self.model_params is None:
+            # careful! generator cannot be assigned.
+            return torch.optim.Adam(model_params, **self.settings)
+        else:
+            return torch.optim.Adam(self.model_params, **self.settings)
